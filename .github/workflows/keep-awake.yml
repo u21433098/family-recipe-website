@@ -1,0 +1,28 @@
+# Pings the Supabase database every 5 days so the free project never
+# gets paused for inactivity. Reads the URL and key from js/config.js.
+name: Keep Supabase awake
+
+on:
+  schedule:
+    - cron: "17 6 */5 * *"   # 06:17 UTC on the 1st, 6th, 11th, 16th, 21st, 26th and 31st
+  workflow_dispatch:          # adds a "Run workflow" button for testing
+
+jobs:
+  ping:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Ping database
+        run: |
+          URL=$(grep -oP 'SUPABASE_URL:\s*"\K[^"]+' js/config.js || true)
+          KEY=$(grep -oP 'SUPABASE_ANON_KEY:\s*"\K[^"]+' js/config.js || true)
+          if [ -z "$URL" ] || [ -z "$KEY" ]; then
+            echo "No Supabase details in js/config.js yet - nothing to ping."
+            exit 0
+          fi
+          STATUS=$(curl -s -o /tmp/out.txt -w "%{http_code}" -X POST "$URL/rest/v1/rpc/check_passcode" \
+            -H "apikey: $KEY" -H "Authorization: Bearer $KEY" -H "Content-Type: application/json" \
+            -d '{"p_passcode":"keep-awake-ping"}')
+          echo "Supabase answered HTTP $STATUS: $(cat /tmp/out.txt)"
+          [ "$STATUS" = "200" ]
